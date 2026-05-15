@@ -1,0 +1,16 @@
+services:
+  web:
+    build: .
+    ports: ["3000:3000"]
+    env_file: .env.example
+    depends_on: [postgres, redis]
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: enso
+      POSTGRES_PASSWORD: enso
+      POSTGRES_DB: enso
+    ports: ["5432:5432"]
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]

@@ -1,0 +1,6 @@
+export type EnsoPhase='Neutral'|'El Niño Watch'|'Weak El Niño'|'Moderate El Niño'|'Strong El Niño'|'Super El Niño'|'Weak La Niña'|'Moderate La Niña'|'Strong La Niña';
+export type EnsoStatus={phase:EnsoPhase;confidence:number;nino34:number;oni:number;soi:number;sstAnomaly:number;expectedWindow:string;updatedAt:string;source:string;regions:{name:string;anomaly:number;bounds:string}[];trend:{month:string;nino34:number;oni:number;soi:number}[];advanced:{kelvinWave:number;heatContent:number;tradeWind:number;walker:number}};
+export type ForecastPoint={season:string;elNino:number;neutral:number;laNina:number;mean:number;p10:number;p90:number};
+export type ModelTrace={model:string;kind:'dynamic'|'statistical'|'official';values:{season:string;value:number}[]};
+export type NepalRegion={id:string;name:string;type:'national'|'province'|'district'|'terrain';terrain:'Terai'|'Hill'|'Mountain'|'Himalayan'|'Mixed';province?:string;lat:number;lon:number};
+export type NepalImpact={region:NepalRegion;updatedAt:string;ensoSensitivity:number;weakMonsoonProbability:number;delayedMonsoonProbability:number;extremeRainProbability:number;droughtProbability:number;landslideProbability:number;hydropowerRisk:number;agriculture:{rice:number;maize:number;wheat:number;millet:number};signals:{label:string;value:string;risk:'low'|'medium'|'high'}[];narrative:string;uncertainty:string};

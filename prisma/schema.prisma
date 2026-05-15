@@ -1,0 +1,7 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+model ClimateObservation { id String @id @default(cuid()) source String metric String region String observedAt DateTime value Float unit String quality String @default("raw") createdAt DateTime @default(now()) @@index([metric, region, observedAt]) }
+model EnsoForecast { id String @id @default(cuid()) modelName String season String leadMonth Int elNinoProbability Float neutralProbability Float laNinaProbability Float nino34Mean Float p10 Float p90 Float issuedAt DateTime @@index([modelName, issuedAt]) }
+model RegionalImpact { id String @id @default(cuid()) regionId String regionName String country String terrain String weakMonsoonProbability Float droughtProbability Float floodProbability Float landslideProbability Float hydropowerRisk Float agricultureRisk Json issuedAt DateTime @@index([country, regionId, issuedAt]) }
+model AlertRule { id String @id @default(cuid()) email String metric String comparator String threshold Float region String channel String active Boolean @default(true) createdAt DateTime @default(now()) }
+model NewsItem { id String @id @default(cuid()) source String title String url String @unique publishedAt DateTime sentiment String misinformationRisk String summary String createdAt DateTime @default(now()) }
