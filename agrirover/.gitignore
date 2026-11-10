@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+install/
+log/
+*-backups/
+*.kicad_prl
+fp-info-cache
+data/runtime/
