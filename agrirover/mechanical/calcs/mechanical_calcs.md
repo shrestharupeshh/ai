@@ -97,11 +97,11 @@ CG height 222 mm, half track 165 mm, caster arm 190 mm.
 ## 8. Envelope, clearance and turning
 
 * Overall width = track + wheel width = 354 mm (limit 400).
-* Overall length = 472 mm incl. bumper (limit 500).
+* Overall length = 480 mm incl. bumper (limit 500).
 * Overall height = camera mast top ≈ 1250 mm (limit 1450).
-* Swept radius when turning in place = 255 mm → swept diameter 510 mm; minimum turning radius of the path = 0 (differential drive, axle centred).
-* Aisle 600 mm: straight-line side clearance 123 mm; U-turn clearance 45 mm per side.
-* Aisle 700 mm: straight-line side clearance 173 mm; U-turn clearance 95 mm per side.
+* Swept radius when turning in place = 280 mm → swept diameter 559 mm; minimum turning radius of the path = 0 (differential drive, axle centred).
+* Aisle 600 mm: straight-line side clearance 123 mm; U-turn clearance 20 mm per side.
+* Aisle 700 mm: straight-line side clearance 173 mm; U-turn clearance 70 mm per side.
 * Ground clearance = wheel radius − motor can radius = 50 − 18.5 = 31.5 mm (requirement ≥ 30 mm → OK).
 
 ## 9. Structural checks

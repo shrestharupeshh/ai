@@ -59,7 +59,6 @@ class RoverSim:
         self.capacity_wh = cfg["battery"]["nominal_v"] * cfg["battery"]["capacity_ah"]
         self.loads = cfg["power_loads_w"]
         c = cfg["chassis"]
-        self.half_l, self.half_w = (c["plate_length_mm"] / 2 + 12) / 1000, config.half_width()
         self.lidar_x = c["lidar_x_mm"] / 1000
         x, y, yaw = pose or world.dock
         self.s = SimState(x=x, y=y, yaw=yaw, soc_wh=self.capacity_wh * soc)
@@ -69,9 +68,10 @@ class RoverSim:
         self.gyro_bias = float(self.rng.normal(0, 0.002))
         self.cv_active = False
         self._gyro, self._p_now = 0.0, 0.0
+        outline = config.footprint_outline()
         fp = []
-        for u in np.linspace(-1, 1, 9):
-            fp += [(self.half_l, u * self.half_w), (-self.half_l, u * self.half_w), (u * self.half_l, self.half_w), (u * self.half_l, -self.half_w)]
+        for (x0, y0), (x1, y1) in zip(outline, outline[1:] + outline[:1]):
+            fp += [(x0 + (x1 - x0) * k / 6, y0 + (y1 - y0) * k / 6) for k in range(6)]
         self._fp = np.array(fp)
 
     # ------------------------------------------------------------------ interface used by the "brain"

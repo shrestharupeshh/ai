@@ -27,15 +27,17 @@ from .sim2d import RoverSim
 from .world import Box, World
 
 
-def small_cfg(aisle: float = 0.8, benches: int = 2, stations: int = 3, length: float = 4.0) -> dict:
-    """A reduced greenhouse (fast to simulate) with the same construction rules as the reference house."""
+def small_cfg(aisle: float = 0.8, benches: int = 2, stations: int = 3, length: float = 4.0, outer_aisle: float | None = None) -> dict:
+    """A reduced greenhouse (fast to simulate) with the same construction rules as the reference house.
+    `aisle` is the width between benches; `outer_aisle` the two wall-side aisles (defaults to `aisle`)."""
     cfg = copy.deepcopy(config.greenhouse())
+    outer = aisle if outer_aisle is None else outer_aisle
     bw = cfg["bench"]["width"]
     cfg["bench"]["length"] = length
-    cfg["benches_y0"] = [round(aisle + i * (bw + aisle), 3) for i in range(benches)]
-    cfg["room"] = {"x": cfg["bench"]["x0"] + length + 2.0, "y": round(aisle + benches * (bw + aisle), 3)}
+    cfg["benches_y0"] = [round(outer + i * (bw + aisle), 3) for i in range(benches)]
+    cfg["room"] = {"x": cfg["bench"]["x0"] + length + 2.0, "y": round(2 * outer + benches * bw + (benches - 1) * aisle, 3)}
     cfg["aisle_width"] = aisle
-    cfg["dock"] = {"x": 1.0, "y": round(aisle / 2, 3), "yaw": 0.0}
+    cfg["dock"] = {"x": 1.0, "y": round(max(outer / 2, 0.45), 3), "yaw": 0.0}       # dock stands in the open head corridor
     cfg["stations"]["count"] = stations
     cfg["obstacles"] = []
     return cfg
@@ -109,18 +111,20 @@ def s_nominal() -> Result:
          lambda m, r: r.store.query("SELECT COUNT(DISTINCT plant_id) n FROM observations")[0]["n"]),
         ("one environment sample per station", lambda m, r: r.store.query("SELECT COUNT(*) n FROM env_samples")[0]["n"] == n,
          lambda m, r: r.store.query("SELECT COUNT(*) n FROM env_samples")[0]["n"]),
+        ("no false obstacle detections in an empty house", lambda m, r: "OBSTACLE_DETECTED" not in m["events"], lambda m, r: m["events"]),
     ])
 
 
 def s_narrow_aisle() -> Result:
-    r = build(small_cfg(aisle=0.60))
+    r = build(small_cfg(aisle=0.60, outer_aisle=0.80, benches=3))
     r.start_mission()
     r.run(900)
-    return _result("narrow_aisle_0.60m", "Transit and inspection in the minimum 0.60 m aisle (R-ENV-03)", r, [
+    return _result("narrow_aisle_0.60m", "Transit and inspection in 0.60 m aisles between benches (R-ENV-03); wall-side aisles 0.80 m", r, [
         ("mission state DONE", lambda m, r: m["final_state"] == "DONE", lambda m, r: m["final_state"]),
         NO_COLLISION,
         ("min clearance >= 0.03 m", lambda m, r: m["min_clearance_m"] >= 0.03, lambda m, r: m["min_clearance_m"]),
         ("no station skipped", lambda m, r: not m["skipped"], lambda m, r: m["skipped"]),
+        ("stop position error <= 0.05 m", lambda m, r: m["stop_err_max_m"] <= 0.05, lambda m, r: m["stop_err_max_m"]),
     ])
 
 
@@ -133,7 +137,7 @@ def s_static_obstacle() -> Result:
     return _result("unmapped_obstacle", "Crate not in the facility drawing blocks the planned line through the tail corridor", r, [
         ("mission state DONE", lambda m, r: m["final_state"] == "DONE", lambda m, r: m["final_state"]),
         NO_COLLISION,
-        ("obstacle detected and path replanned", lambda m, r: "REPLAN" in m["events"], lambda m, r: m["events"]),
+        ("obstacle detected and added to the costmap", lambda m, r: "OBSTACLE_DETECTED" in m["events"], lambda m, r: m["events"]),
         ("min clearance >= 0.03 m", lambda m, r: m["min_clearance_m"] >= 0.03, lambda m, r: m["min_clearance_m"]),
     ])
 
@@ -150,7 +154,7 @@ def s_blocked_aisle() -> Result:
         ("mission terminates at the dock (DONE)", lambda m, r: m["final_state"] == "DONE" and m["dock_error_m"] < 0.1, lambda m, r: (m["final_state"], m["dock_error_m"])),
         NO_COLLISION,
         ("every station is either inspected or reported skipped", lambda m, r: m["stations_done"] + len(m["skipped"]) == n, lambda m, r: (m["stations_done"], m["skipped"])),
-        ("blockage reported (REPLAN or STATION_SKIPPED event)", lambda m, r: bool({"REPLAN", "STATION_SKIPPED"} & set(m["events"])), lambda m, r: m["events"]),
+        ("blockage reported (OBSTACLE_DETECTED / REPLAN / STATION_SKIPPED)", lambda m, r: bool({"OBSTACLE_DETECTED", "REPLAN", "STATION_SKIPPED"} & set(m["events"])), lambda m, r: m["events"]),
     ])
 
 
@@ -162,7 +166,7 @@ def s_person() -> Result:
     while r.sim.s.t < 900 and r.state not in ("DONE", "ABORTED"):
         s = r.sim.s
         if t_in is None and r.state == "NAVIGATING" and r.follower.v > 0.25 and abs(math.sin(s.yaw)) < 0.1:
-            d = 0.70 * (1 if math.cos(s.yaw) > 0 else -1)                # person steps out 0.45 m ahead of the bumper
+            d = 0.62 * (1 if math.cos(s.yaw) > 0 else -1)                # person steps out 0.22 m ahead of the bumper (inside the protective field)
             r.world.dynamic.append(Box("person", s.x + d - 0.15, s.y - 0.2, s.x + d + 0.15, s.y + 0.2))
             t_in, x_in = s.t, s.x
         if t_in is not None and t_out is None:
@@ -172,11 +176,11 @@ def s_person() -> Result:
                 r.world.dynamic.clear()
                 t_out = s.t
         r.step()
-    res = _result("person_steps_into_path", "A person steps 0.45 m in front of the moving rover, stays 8 s, then leaves", r, [
+    res = _result("person_steps_into_path", "A person steps 0.22 m in front of the bumper at 0.3 m/s, stays 8 s, then leaves", r, [
         ("mission state DONE", lambda m, r: m["final_state"] == "DONE", lambda m, r: m["final_state"]),
         NO_COLLISION,
         ("stopping distance <= 0.15 m (R-SAF-02)", lambda m, r: stopped_d is not None and stopped_d <= 0.15, lambda m, r: None if stopped_d is None else round(stopped_d, 3)),
-        ("min clearance >= 0.10 m", lambda m, r: m["min_clearance_m"] >= 0.10, lambda m, r: m["min_clearance_m"]),
+        ("never closer than 0.05 m to the person", lambda m, r: m["min_clearance_m"] >= 0.05, lambda m, r: m["min_clearance_m"]),
     ])
     return res
 

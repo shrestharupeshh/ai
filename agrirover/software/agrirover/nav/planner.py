@@ -13,17 +13,25 @@ from scipy.ndimage import distance_transform_edt
 
 
 class Costmap:
-    def __init__(self, occupied: np.ndarray, res: float, robot_radius: float, inflation: float = 0.25, margin: float = 0.02):
+    def __init__(self, occupied: np.ndarray, res: float, robot_radius: float, inflation: float = 0.25, margin: float = 0.03,
+                 circumscribed: float | None = None):
+        """robot_radius = inscribed radius (lethal below it + margin); circumscribed = turn-in-place envelope."""
         self.res, self.robot_radius = res, robot_radius
+        self.circumscribed = circumscribed if circumscribed is not None else robot_radius
         self.occ = occupied.copy()
         self.inflation, self.margin = inflation, margin
         self._rebuild()
 
     def _rebuild(self):
-        self.dist = distance_transform_edt(~self.occ) * self.res          # metres to the nearest obstacle cell
-        self.lethal = self.dist <= (self.robot_radius + self.margin)
+        # The room boundary is an obstacle just outside the grid. EDT measures centre-to-centre, so half a cell is
+        # subtracted to get a conservative centre-to-obstacle-edge distance.
+        padded = np.pad(self.occ, 1, constant_values=True)
+        self.dist = np.clip(distance_transform_edt(~padded)[1:-1, 1:-1] * self.res - self.res / 2, 0, None)
+        self.lethal = self.dist < (self.robot_radius + self.margin)
         d = np.clip(self.dist - self.robot_radius - self.margin, 0, None)
-        self.cost = np.where(self.lethal, np.inf, 1.0 + 6.0 * np.exp(-d / max(self.inflation, 1e-3) * 3.0))
+        # cells where the rover fits only in some orientations are passable but expensive: paths keep to the middle
+        self.cost = np.where(self.lethal, np.inf, 1.0 + 6.0 * np.exp(-d / max(self.inflation, 1e-3) * 3.0)
+                             + np.where(self.dist < self.circumscribed + 0.03, 25.0, 0.0))
 
     def add_obstacles(self, pts_xy: np.ndarray):
         """Mark world points (N, 2) as occupied and rebuild the inflation layers."""
@@ -35,11 +43,16 @@ class Costmap:
         self._rebuild()
 
     def cell(self, x: float, y: float) -> tuple[int, int]:
-        return int(y / self.res), int(x / self.res)
+        return int(math.floor(y / self.res + 1e-6)), int(math.floor(x / self.res + 1e-6))
 
     def is_free(self, x: float, y: float) -> bool:
         i, j = self.cell(x, y)
         return 0 <= i < self.occ.shape[0] and 0 <= j < self.occ.shape[1] and not self.lethal[i, j]
+
+    def can_rotate(self, x: float, y: float, slack: float = 0.0) -> bool:
+        """True where the full turning envelope is clear of mapped obstacles."""
+        i, j = self.cell(x, y)
+        return 0 <= i < self.occ.shape[0] and 0 <= j < self.occ.shape[1] and float(self.dist[i, j]) >= self.circumscribed - slack
 
     def clearance(self, x: float, y: float) -> float:
         i, j = self.cell(x, y)
@@ -92,10 +105,16 @@ def astar(cm: Costmap, start: tuple[float, float], goal: tuple[float, float]) ->
 
 
 def _line_free(cm: Costmap, a, b) -> bool:
+    """A shortcut is allowed only if it stays at least as clear of obstacles as the turning envelope, or - inside
+    places too narrow for that - at least as clear as its own end points (never cut closer than the A* path did)."""
+    def d(p):
+        i, j = cm.cell(*p)
+        return float(cm.dist[i, j]) if 0 <= i < cm.occ.shape[0] and 0 <= j < cm.occ.shape[1] else 0.0
+    need = max(cm.robot_radius + cm.margin, min(cm.circumscribed + 0.03, d(a), d(b)) - cm.res / 2)
     n = max(2, int(math.hypot(b[0] - a[0], b[1] - a[1]) / (cm.res * 0.5)))
     for k in range(n + 1):
         t = k / n
-        if not cm.is_free(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t):
+        if d((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)) < need:
             return False
     return True
 

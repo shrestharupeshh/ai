@@ -48,18 +48,25 @@ class SimCamera:
         self.world, self.sim, self.truth, self.blur_px, self.gain = world, sim, truth, blur_px, gain
         self.n = 0
 
-    def capture(self, station: Station, view: dict):
-        plants = [self.truth[pid] for pid in view["plants"]]
+    def capture(self, station: Station, view: dict, heading: float = 0.0):
+        """view["camera"] names the camera that sees this bench side when the rover faces +x; facing -x the other
+        physical camera sees it and the plants appear in reverse order along the image x axis."""
         rows, cols = self.world.cfg["plants"]["rows_per_side"], self.world.cfg["plants"]["per_station"]
+        flipped = abs(wrap(heading)) > math.pi / 2
+        pids = list(view["plants"])
+        if flipped:
+            pids = [pid for r in range(rows) for pid in reversed(pids[r * cols:(r + 1) * cols])]
+        cam = view["camera"] if not flipped else ("right" if view["camera"] == "left" else "left")
+        plants = [self.truth[pid] for pid in pids]
         self.n += 1
         s = self.sim.s
-        sign = 1.0 if view["camera"] == "left" else -1.0
-        ex = (s.x - station.x) * math.cos(station.yaw) + (s.y - station.y) * math.sin(station.yaw)      # along-aisle stop error
-        ey = -(s.x - station.x) * math.sin(station.yaw) + (s.y - station.y) * math.cos(station.yaw)     # lateral error
+        sign = 1.0 if cam == "left" else -1.0
+        ex = (s.x - station.x) * math.cos(heading) + (s.y - station.y) * math.sin(heading)      # along-track stop error
+        ey = -(s.x - station.x) * math.sin(heading) + (s.y - station.y) * math.cos(heading)     # lateral error
         img, truth = camera_sim.render_view(plants, rows, cols, gain=self.gain, blur_px=self.blur_px, seed=self.n,
                                             shift_px=(-sign * ex * camera_sim.PX_PER_M, sign * ey * camera_sim.PX_PER_M))
         slots = [(p.pid, *camera_sim.slot_px(*divmod(k, cols), rows, cols)) for k, p in enumerate(plants)]
-        return img, slots, camera_sim.PX_PER_M, camera_sim.GRAY_PATCH, truth
+        return img, slots, camera_sim.PX_PER_M, camera_sim.GRAY_PATCH, truth, cam
 
 
 class Rover:
@@ -78,8 +85,9 @@ class Rover:
         self.field = LikelihoodField(static.lidar_segments(), (world.w, world.h))
         self.loc = Localizer(self.field, world.dock, sim.lidar_x)
         self._static_grid = world.nav_grid(0.05, include_obstacles=False)
-        self.costmap = Costmap(self._static_grid, 0.05, config.footprint_radius())
-        self.follower = PathFollower(ControllerParams(half_width=config.half_width() + 0.03))
+        self.costmap = self._new_costmap()
+        self.follower = PathFollower(ControllerParams(half_width=config.half_width() + 0.03, swept_radius=config.footprint_radius(),
+                                                       nose=max(x for x, _ in config.footprint_outline())))
         self.env = env or SimulatedEnvSensors((world.w, world.h))
         self.truth = truth or {pid: camera_sim.PlantTruth(pid, seed=i) for i, pid in enumerate(world.plants)}
         self.camera = camera or SimCamera(world, sim, self.truth)
@@ -104,12 +112,20 @@ class Rover:
         self._retakes = 0
         self._env_id = None
         self._stop_requested = False
-        self._paused_state: str | None = None
+        self._dyn: list = []
+        self._station_yaw = 0.0
+        self._legs: list = []
+        self._leg = None
+        self._backups = 0
+        self._t_replan = self._t_obst = -1e9
         self._dist0 = self._e0 = 0.0
         self.stop_errors: list[tuple[str, float, float]] = []          # (station, position error m, yaw error rad) ground truth
         self.capture_log: list[dict] = []
 
     # ------------------------------------------------------------------ helpers
+    def _new_costmap(self) -> Costmap:
+        return Costmap(self._static_grid, 0.05, config.inscribed_radius(), circumscribed=config.footprint_radius())
+
     @property
     def now(self) -> float:
         return self.epoch + self.sim.s.t
@@ -131,10 +147,84 @@ class Rover:
         path = astar(self.costmap, self.pose[:2], (x, y))
         if path is None:
             return False
+        if yaw == "aisle":                    # inspection stop: either direction along the aisle is fine (cameras on both sides)
+            k = max(0, len(path) - 12)
+            h = math.atan2(path[-1][1] - path[k][1], path[-1][0] - path[k][0]) if len(path) > 1 else self.pose[2]
+            yaw = 0.0 if abs(wrap(h)) < math.pi / 2 else math.pi
+            self._station_yaw = yaw
         self.follower.set_path(path, yaw)
         self._t_goal = self.sim.s.t
         self._t_blocked = None
         return True
+
+    # ------------------------------------------------------------------ aisle-aware goal sequencing
+    ENTRY_OFFSET = 0.45       # entry / exit way-point this far outside the aisle mouth (> turning envelope radius)
+
+    def _aisle_of(self, x: float, y: float) -> float | None:
+        bx = self.world.benches[0]
+        if bx.x0 - 0.05 <= x <= bx.x1 + 0.05:
+            for ya in self.world.aisles_y:
+                if abs(y - ya) < 0.2:
+                    return ya
+        return None
+
+    def _exit_ahead(self, ya: float, yaw: float) -> tuple:
+        bx = self.world.benches[0]
+        return (bx.x1 + self.ENTRY_OFFSET, ya, None) if abs(wrap(yaw)) < math.pi / 2 else (bx.x0 - self.ENTRY_OFFSET, ya, None)
+
+    def _station_legs(self, st: Station) -> list:
+        """Way-points to reach a station: enter the aisle from an entry point, already aligned with it; never rely
+        on turning round inside an aisle that is narrower than the turning envelope."""
+        bx = self.world.benches[0]
+        x, y, yaw = self.pose
+        if self._aisle_of(x, y) is not None and abs(y - st.y) < 0.2:
+            need = 0.0 if st.x >= x else math.pi
+            if self.costmap.can_rotate(x, y, -0.02) or abs(wrap(need - yaw)) < 0.5 or abs(st.x - x) < 0.05:
+                return [(st.x, st.y, "aisle")]
+            return [self._exit_ahead(st.y, yaw)] + [(st.x, st.y, "aisle")]       # leave forwards, then re-plan from outside
+        here = self._aisle_of(x, y)
+        pre = [self._exit_ahead(here, yaw)] if here is not None and not self.costmap.can_rotate(x, y, -0.02) else []
+        start = pre[0][:2] if pre else (x, y)
+        best = None
+        for e in ((bx.x0 - self.ENTRY_OFFSET, st.y, 0.0), (bx.x1 + self.ENTRY_OFFSET, st.y, math.pi)):
+            path = astar(self.costmap, start, e[:2])
+            inside = astar(self.costmap, e[:2], (st.x, st.y))
+            if path is not None and inside is not None:
+                cost = path_length(path) + path_length(inside)
+                if best is None or cost < best[0]:
+                    best = (cost, e)
+        return pre + [best[1], (st.x, st.y, "aisle")] if best else []
+
+    def _dock_legs(self) -> list:
+        x, y, yaw = self.pose
+        here = self._aisle_of(x, y)
+        if here is not None and not self.costmap.can_rotate(x, y, -0.02) and abs(wrap(math.pi - yaw)) > 0.5:
+            return [self._exit_ahead(here, yaw), tuple(self.world.dock)]
+        return [tuple(self.world.dock)]
+
+    def _rear_free_in_map(self, dist: float = 0.35) -> bool:
+        """Benches are invisible to the lidar, so reversing is only allowed where the facility map says it is clear."""
+        x, y, yaw = self.pose
+        need = config.inscribed_radius() + 0.08
+        for k in range(1, 8):
+            d = dist * k / 7
+            i, j = self.costmap.cell(x - d * math.cos(yaw), y - d * math.sin(yaw))
+            if not (0 <= i < self.costmap.occ.shape[0] and 0 <= j < self.costmap.occ.shape[1]) or self.costmap.dist[i, j] < need:
+                return False
+        return True
+
+    def _start_legs(self, legs: list) -> bool:
+        self._legs = list(legs)
+        return self._advance_leg()
+
+    def _advance_leg(self) -> bool:
+        if not self._legs:
+            return False
+        self._leg = self._legs.pop(0)
+        return self._plan_to(*self._leg)
+
+    def _replan(self) -> bool:
+        return self._start_legs(self._station_legs(self.current) if self.current else self._dock_legs())
 
     # ------------------------------------------------------------------ operator API (dashboard / tests)
     def start_mission(self, name: str = "inspection", order: list[Station] | None = None) -> int:
@@ -161,7 +251,7 @@ class Rover:
         if self.state == "ESTOP" and not self.sim.s.faults.estop:
             self.sim.clear_bumper()
             self._event("info", "RESUME", "operator resume after stop")
-            if self.current is not None and self._plan_to(self.current.x, self.current.y, self.current.yaw):
+            if self.current is not None and self._replan():
                 self._set("NAVIGATING", self.current.sid)
             else:
                 self._return("resume")
@@ -170,7 +260,7 @@ class Rover:
     def _next_station(self):
         while self.queue:
             self.current = self.queue.pop(0)
-            if self._plan_to(self.current.x, self.current.y, self.current.yaw):
+            if self._replan():
                 self._set("NAVIGATING", self.current.sid)
                 return
             self.skipped.append(self.current.sid)
@@ -180,7 +270,7 @@ class Rover:
 
     def _return(self, why: str):
         self.current = None
-        if self._plan_to(self.world.dock[0], self.world.dock[1], self.world.dock[2]):
+        if self._replan():
             self._set("RETURNING", why)
         else:
             self._finish("ABORTED", f"no path to dock ({why})")
@@ -203,7 +293,7 @@ class Rover:
             return True
         view = st.views[self._view_i]
         self.sim.cv_active = True
-        img, slots, ppm, patch, truth = self.camera.capture(st, view)
+        img, slots, ppm, patch, truth, cam_name = self.camera.capture(st, view, self._station_yaw)
         res = pipeline.analyse(img, slots, ppm, patch)
         if not res["quality"]["ok"] and self._retakes < self.p.max_retakes:
             self._retakes += 1
@@ -211,12 +301,12 @@ class Rover:
             return False
         rel = ""
         if self.save_images:
-            rel = f"m{self.mission_id:04d}_{st.sid}_{view['camera']}.jpg"
+            rel = f"m{self.mission_id:04d}_{st.sid}_{cam_name}.jpg"
             cv2.imwrite(str(self.store.image_dir / rel), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
         for o in res["plants"]:
-            self.store.add_observation(self.mission_id, self.now, self.world.plants[o["plant_id"]], st.sid, view["camera"], self.pose,
+            self.store.add_observation(self.mission_id, self.now, self.world.plants[o["plant_id"]], st.sid, cam_name, self.pose,
                                        rel, o, res["quality"], self._env_id, res["level"])
-        self.capture_log.append(dict(station=st.sid, camera=view["camera"], quality=res["quality"], plants=res["plants"], truth=truth["plants"]))
+        self.capture_log.append(dict(station=st.sid, camera=cam_name, quality=res["quality"], plants=res["plants"], truth=truth["plants"]))
         self._view_i += 1
         self._retakes = 0
         return self._view_i >= len(st.views)
@@ -267,32 +357,41 @@ class Rover:
             if self.follower.blocked:
                 self._t_blocked = self._t_blocked if self._t_blocked is not None else t
                 waited = t - self._t_blocked
-                if waited > p.blocked_replan_s and int(waited / p.blocked_replan_s) != int((waited - self.DT) / p.blocked_replan_s):
-                    self._mark_obstacles()
-                    goal = (self.current.x, self.current.y, self.current.yaw) if self.current else self.world.dock
-                    if self._plan_to(*goal):
+                if (self.follower.blocked_reason == "rotation" and waited > 1.0 and self._backups < 3 and self.follower._backup_left <= 0
+                        and self._rear_free_in_map()):
+                    self._backups += 1                       # obstacle inside the turning envelope: reverse out, then replan
+                    self._event("info", "RECOVERY_BACKUP", "obstacle inside turning envelope: backing up 0.2 m")
+                    self.follower.start_backup(0.20)
+                elif waited > p.blocked_replan_s and int(waited / p.blocked_replan_s) != int((waited - self.DT) / p.blocked_replan_s):
+                    self._update_dynamic(force=True)
+                    if self._replan():
                         if waited < 2 * p.blocked_replan_s:
                             self._event("info", "REPLAN", "path blocked: obstacle added to costmap, replanned")
-                        self._t_blocked = t - waited            # same blockage episode until motion resumes
-                    else:
-                        self._t_blocked = t - waited            # keep the clock running
-                        self.costmap = Costmap(self._static_grid, 0.05, config.footprint_radius())   # obstacle may be a person: forget and retry
-                        self._plan_to(*goal)
-                        self._t_blocked = t - waited
+                    self._t_blocked = t - waited             # same blockage episode until motion resumes
                 if waited > p.blocked_skip_s and self.state == "NAVIGATING":
                     self.skipped.append(self.current.sid)
                     self._event("warn", "STATION_SKIPPED", f"{self.current.sid}: blocked for {waited:.0f} s")
-                    self.costmap = Costmap(self._static_grid, 0.05, config.footprint_radius())
                     self._next_station()
+                elif waited > 4 * p.blocked_skip_s and self.state == "RETURNING":
+                    self._event("error", "DOCK_BLOCKED", f"return path blocked for {waited:.0f} s")
+                    self._finish("ABORTED", "dock blocked")
                 return
+            if self.follower._backup_left <= 0 and self.follower.v > 0.1:
+                self._backups = 0
             self._t_blocked = None
+            if self.follower.done and self._legs:              # intermediate way-point reached (aisle entry / exit)
+                if not self._advance_leg():
+                    self.follower.cancel()
+                    self._t_blocked = t                        # treated as a blockage: retried, then skipped
+                    self.follower.blocked = True
+                return
             if self.follower.done:
                 if self.state == "RETURNING":
                     self._finish("DONE" if not self.skipped and not self._stop_requested and self.detail == "stations complete" else "ABORTED"
                                  if self.detail in ("low battery",) else "DONE", self.detail)
                     return
                 s = self.sim.s
-                self.stop_errors.append((self.current.sid, math.hypot(s.x - self.current.x, s.y - self.current.y), abs(wrap(s.yaw - self.current.yaw))))
+                self.stop_errors.append((self.current.sid, math.hypot(s.x - self.current.x, s.y - self.current.y), abs(wrap(s.yaw - self._station_yaw))))
                 self._view_i = self._retakes = 0
                 self._set("SETTLING", self.current.sid)
             elif t - self._t_goal > p.goal_timeout_s:
@@ -320,20 +419,40 @@ class Rover:
                     self.store.update_mission(self.mission_id, stations_done=len(self.done_stations))
                     self._next_station()
 
-    def _mark_obstacles(self):
-        """Add lidar returns that are not explained by the facility drawing to the costmap (within 2.5 m)."""
-        if self._last_scan is None:
+    def _update_dynamic(self, force: bool = False):
+        """Obstacle layer: lidar returns not explained by the facility drawing (within 2.5 m) are kept for 15 s and
+        inflated into the costmap; if the remaining path crosses them, replan before the protective field has to act."""
+        t = self.sim.s.t
+        had = bool(self._dyn)
+        if self._last_scan is not None:
+            r, a = self._last_scan
+            ok = np.isfinite(r) & (r < 2.5)
+            x, y, yaw = self.pose
+            ox, oy = x + self.sim.lidar_x * math.cos(yaw), y + self.sim.lidar_x * math.sin(yaw)
+            pts = np.column_stack((ox + r[ok] * np.cos(a[ok] + yaw), oy + r[ok] * np.sin(a[ok] + yaw)))
+            ij = np.round(pts / self.field.res).astype(int)
+            inb = (ij[:, 0] >= 0) & (ij[:, 1] >= 0) & (ij[:, 0] < self.field.field.shape[1]) & (ij[:, 1] < self.field.field.shape[0])
+            pts, ij = pts[inb], ij[inb]
+            unknown = pts[self.field.field[ij[:, 1], ij[:, 0]] < 0.05]          # > ~0.2 m from every mapped feature
+            if len(unknown) >= 3:
+                self._dyn.append((t, unknown))
+        if self._dyn and not had and t - self._t_obst > 10.0:
+            self._t_obst = t
+            c = self._dyn[-1][1].mean(axis=0)
+            self._event("info", "OBSTACLE_DETECTED", f"unmapped obstacle near ({c[0]:.1f}, {c[1]:.1f}) added to the costmap")
+        self._dyn = [(ts, p) for ts, p in self._dyn if t - ts < 15.0]
+        if not (had or self._dyn or force):
             return
-        r, a = self._last_scan
-        ok = np.isfinite(r) & (r < 2.5)
-        x, y, yaw = self.pose
-        ox, oy = x + self.sim.lidar_x * math.cos(yaw), y + self.sim.lidar_x * math.sin(yaw)
-        pts = np.column_stack((ox + r[ok] * np.cos(a[ok] + yaw), oy + r[ok] * np.sin(a[ok] + yaw)))
-        ij = np.round(pts / self.field.res).astype(int)
-        inb = (ij[:, 0] >= 0) & (ij[:, 1] >= 0) & (ij[:, 0] < self.field.field.shape[1]) & (ij[:, 1] < self.field.field.shape[0])
-        pts, ij = pts[inb], ij[inb]
-        unknown = self.field.field[ij[:, 1], ij[:, 0]] < 0.05          # > ~0.2 m from every mapped feature
-        self.costmap.add_obstacles(pts[unknown])
+        self.costmap = self._new_costmap()
+        if self._dyn:
+            self.costmap.add_obstacles(np.vstack([p for _, p in self._dyn]))
+        f = self.follower
+        if self.state in ("NAVIGATING", "RETURNING") and f.path and not f.done and not f.blocked:
+            ahead = f.path[f.idx + 4:f.idx + 60]
+            if any(not self.costmap.is_free(px, py) for px, py in ahead):
+                if self._replan() and t - self._t_replan > 5.0:
+                    self._t_replan = t
+                    self._event("info", "REPLAN", "unmapped obstacle on the path: replanned")
 
     # ------------------------------------------------------------------ main loop
     def step(self):
@@ -355,13 +474,16 @@ class Rover:
                 self._last_scan = (r, a)
                 ok = np.isfinite(r)
                 self._scan_xy_robot = np.column_stack((sim.lidar_x + r[ok] * np.cos(a[ok]), r[ok] * np.sin(a[ok])))
-                if self._tick % 25 == 0:                                # 2 Hz scan matching
+                if self._tick % 10 == 0:                                # 5 Hz scan matching
                     self.loc.correct(r, a)
+                if self._tick % 25 == 0:
+                    self._update_dynamic()
                     if self.mapper is not None:
                         self.mapper.integrate(self.pose, r, a, sim.lidar_x)
         self._mission_tick(base)
-        v, w = self.follower.step(self.pose, dt, self._scan_xy_robot) if self.state in ("NAVIGATING", "RETURNING") else (0.0, 0.0)
-        if self.state not in ("NAVIGATING", "RETURNING"):
+        moving = self.state in ("NAVIGATING", "RETURNING") and not self.loc.suspect     # never drive on an untrusted pose
+        v, w = self.follower.step(self.pose, dt, self._scan_xy_robot, self.costmap.can_rotate(self.pose[0], self.pose[1], -0.02)) if moving else (0.0, 0.0)
+        if not moving:
             self.follower.v = self.follower.w = 0.0
         v, w = limit_twist(v, w, 0.5, 1.2, 12.0, self.r, self.track)
         sim.set_wheels(*twist_to_wheels(v, w, self.r, self.track))

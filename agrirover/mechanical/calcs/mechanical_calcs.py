@@ -209,11 +209,12 @@ def main() -> dict:
     width = ch["track_width_mm"] + ch["wheel_width_mm"]
     r_corner = max(math.hypot(L / 2, Wp / 2 - cham), math.hypot(L / 2 - cham, Wp / 2))
     r_wheel = math.hypot(width / 2, ch["wheel_diameter_mm"] / 2)
-    r_bumper = L / 2 + 12  # bumper stands 12 mm proud of the plate at the nose
+    bumper_half_w = (Wp - 2 * cham + 30) / 2          # bumper bar is 30 mm wider than the chamfered nose
+    r_bumper = math.hypot(L / 2 + 20, bumper_half_w)  # outer bumper corner: face 20 mm ahead of the plate edge
     r_swept = max(r_corner, r_wheel, r_bumper)
     clearance = ch["wheel_diameter_mm"] / 2 - 37 / 2
     p(f"* Overall width = track + wheel width = {width} mm (limit {rq['max_width_m']*1000:.0f}).")
-    p(f"* Overall length = {L + 12} mm incl. bumper (limit {rq['max_length_m']*1000:.0f}).")
+    p(f"* Overall length = {L + 20} mm incl. bumper (limit {rq['max_length_m']*1000:.0f}).")
     p(f"* Overall height = camera mast top ≈ {ch['lower_plate_bottom_z_mm'] + 4 + ch['deck_post_len_mm'] + 3 + ch['mast_height_mm']} mm "
       f"(limit {rq['max_height_m']*1000:.0f}).")
     p(f"* Swept radius when turning in place = {r_swept:.0f} mm → swept diameter {2*r_swept:.0f} mm; "

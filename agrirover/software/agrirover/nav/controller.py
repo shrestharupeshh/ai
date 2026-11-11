@@ -28,7 +28,8 @@ class ControllerParams:
     slow_dist: float = 0.60
     half_width: float = 0.20
     nose: float = 0.245            # axle to bumper face
-    swept_radius: float = 0.255    # turn-in-place envelope
+    swept_radius: float = 0.280    # turn-in-place envelope (bumper corners)
+    small_turn: float = 0.35       # rad: corrections below this are allowed even where a full turn is not
     rotate_margin: float = 0.03
 
 
@@ -44,6 +45,7 @@ class PathFollower:
         self.blocked_reason = ""
         self.phase = "idle"
         self._backup_left = 0.0
+        self._turn_err = 0.0
 
     def set_path(self, path, goal_yaw: float | None = None):
         self.path, self.goal_yaw, self.idx, self.done, self.blocked = list(path), goal_yaw, 0, False, False
@@ -88,7 +90,8 @@ class PathFollower:
             return False, max(0.25, (d - stop_d) / (p.slow_dist - stop_d))
         return False, 1.0
 
-    def step(self, pose: tuple[float, float, float], dt: float, scan_xy_robot: np.ndarray | None = None) -> tuple[float, float]:
+    def step(self, pose: tuple[float, float, float], dt: float, scan_xy_robot: np.ndarray | None = None,
+             rotate_ok: bool = True) -> tuple[float, float]:
         p = self.p
         x, y, yaw = pose
         v_cmd = w_cmd = 0.0
@@ -114,6 +117,7 @@ class PathFollower:
                     self.done = True
                 else:
                     e = wrap(self.goal_yaw - yaw)
+                    self._turn_err = e
                     if abs(e) < p.yaw_tol and abs(self.w) < 0.1:
                         self.done = True
                     else:
@@ -126,6 +130,7 @@ class PathFollower:
                     j += 1
                 lx, ly = self.path[j]
                 err = wrap(math.atan2(ly - y, lx - x) - yaw)
+                self._turn_err = err
                 if abs(err) > p.rotate_thresh or (self.phase == "rotate" and abs(err) > 0.08):
                     self.phase = "rotate"
                     w_cmd = math.copysign(min(p.w_max, max(0.25, 2.0 * abs(err))), err)
@@ -139,13 +144,23 @@ class PathFollower:
         if v_cmd > 0 and scan_xy_robot is not None:
             stop, scale = self.protective_field(scan_xy_robot, self.v)
             if stop:
-                self.blocked, self.blocked_reason = True, "ahead"
-                v_cmd = w_cmd = 0.0
+                e = self._turn_err
+                can_turn = not self.rotation_blocked(scan_xy_robot) and (rotate_ok or abs(e) <= p.small_turn)
+                if self.phase == "track" and abs(e) > 0.08 and can_turn:
+                    # something ahead but the path bends away from it (e.g. approaching a way-point next to a wall
+                    # at an angle): square up to the path first instead of waiting
+                    self.phase = "rotate"
+                    v_cmd, w_cmd = 0.0, math.copysign(min(p.w_max, max(0.25, 2.0 * abs(e))), e)
+                else:
+                    self.blocked, self.blocked_reason = True, "ahead"
+                    v_cmd = w_cmd = 0.0
             else:
                 v_cmd *= scale
-        if abs(w_cmd) > 0.2 and v_cmd < 0.05 and self.rotation_blocked(scan_xy_robot):
-            self.blocked, self.blocked_reason = True, "rotation"       # a corner would sweep through the obstacle
-            v_cmd = w_cmd = 0.0
+        if abs(w_cmd) > 0.05 and v_cmd < 0.05:
+            big = abs(self._turn_err) > p.small_turn
+            if self.rotation_blocked(scan_xy_robot) or (big and not rotate_ok):
+                self.blocked, self.blocked_reason = True, "rotation"   # a corner would sweep through an obstacle / bench
+                v_cmd = w_cmd = 0.0
         # acceleration limits
         dv_up, dv_dn = p.a_lin * dt, p.a_dec * dt
         self.v += max(-dv_dn, min(dv_up, v_cmd - self.v)) if v_cmd >= self.v else max(-dv_dn, v_cmd - self.v)

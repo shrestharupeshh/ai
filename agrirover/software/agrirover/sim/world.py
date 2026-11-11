@@ -113,7 +113,6 @@ class World:
     def nav_grid(self, res: float = 0.05, include_obstacles: bool = True, extra: list[Box] | None = None) -> "np.ndarray":
         nx, ny = int(round(self.w / res)), int(round(self.h / res))
         g = np.zeros((ny, nx), bool)
-        g[0, :] = g[-1, :] = g[:, 0] = g[:, -1] = True
         boxes = list(self.benches) + (self.obstacles if include_obstacles else []) + (extra or [])
         for bx in boxes:
             g[max(0, int(math.floor(bx.y0 / res + 1e-6))):int(math.ceil(bx.y1 / res - 1e-6)),

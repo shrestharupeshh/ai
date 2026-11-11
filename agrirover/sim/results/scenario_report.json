@@ -1,0 +1,657 @@
+[
+  {
+    "name": "nominal_mission",
+    "purpose": "Dock -> all stations -> capture -> dock, 0.8 m aisles",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "mission state DONE",
+        "ok": true,
+        "measured": "DONE"
+      },
+      {
+        "criterion": "all 9 stations inspected",
+        "ok": true,
+        "measured": "9"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      },
+      {
+        "criterion": "min clearance >= 0.05 m",
+        "ok": true,
+        "measured": "0.077"
+      },
+      {
+        "criterion": "stop position error <= 0.05 m",
+        "ok": true,
+        "measured": "0.04"
+      },
+      {
+        "criterion": "stop heading error <= 3 deg",
+        "ok": true,
+        "measured": "2.07"
+      },
+      {
+        "criterion": "returns within 0.10 m of the dock",
+        "ok": true,
+        "measured": "0.036"
+      },
+      {
+        "criterion": "every plant in view has a stored observation",
+        "ok": true,
+        "measured": "96"
+      },
+      {
+        "criterion": "one environment sample per station",
+        "ok": true,
+        "measured": "9"
+      },
+      {
+        "criterion": "no false obstacle detections in an empty house",
+        "ok": true,
+        "measured": "['MISSION_DONE', 'MISSION_START']"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 139.4,
+      "distance_m": 23.12,
+      "energy_wh": 0.654,
+      "collisions": 0,
+      "min_clearance_m": 0.077,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.04,
+      "stop_yaw_err_max_deg": 2.07,
+      "dock_error_m": 0.036,
+      "events": [
+        "MISSION_DONE",
+        "MISSION_START"
+      ]
+    }
+  },
+  {
+    "name": "narrow_aisle_0.60m",
+    "purpose": "Transit and inspection in 0.60 m aisles between benches (R-ENV-03); wall-side aisles 0.80 m",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "mission state DONE",
+        "ok": true,
+        "measured": "DONE"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      },
+      {
+        "criterion": "min clearance >= 0.03 m",
+        "ok": true,
+        "measured": "0.077"
+      },
+      {
+        "criterion": "no station skipped",
+        "ok": true,
+        "measured": "[]"
+      },
+      {
+        "criterion": "stop position error <= 0.05 m",
+        "ok": true,
+        "measured": "0.047"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 177.8,
+      "distance_m": 30.54,
+      "energy_wh": 0.836,
+      "collisions": 0,
+      "min_clearance_m": 0.077,
+      "stations_done": 12,
+      "skipped": [],
+      "stop_err_max_m": 0.047,
+      "stop_yaw_err_max_deg": 2.1,
+      "dock_error_m": 0.038,
+      "events": [
+        "MISSION_DONE",
+        "MISSION_START"
+      ]
+    }
+  },
+  {
+    "name": "unmapped_obstacle",
+    "purpose": "Crate not in the facility drawing blocks the planned line through the tail corridor",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "mission state DONE",
+        "ok": true,
+        "measured": "DONE"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      },
+      {
+        "criterion": "obstacle detected and added to the costmap",
+        "ok": true,
+        "measured": "['MISSION_DONE', 'MISSION_START', 'OBSTACLE_DETECTED', 'REPLAN']"
+      },
+      {
+        "criterion": "min clearance >= 0.03 m",
+        "ok": true,
+        "measured": "0.115"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 149.9,
+      "distance_m": 24.4,
+      "energy_wh": 0.699,
+      "collisions": 0,
+      "min_clearance_m": 0.115,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.04,
+      "stop_yaw_err_max_deg": 2.12,
+      "dock_error_m": 0.04,
+      "events": [
+        "MISSION_DONE",
+        "MISSION_START",
+        "OBSTACLE_DETECTED",
+        "REPLAN"
+      ]
+    }
+  },
+  {
+    "name": "blocked_aisle",
+    "purpose": "A parked cart closes an aisle completely: reroute or skip, never push through",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "mission terminates at the dock (DONE)",
+        "ok": true,
+        "measured": "('DONE', 0.037)"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      },
+      {
+        "criterion": "every station is either inspected or reported skipped",
+        "ok": true,
+        "measured": "(9, [])"
+      },
+      {
+        "criterion": "blockage reported (OBSTACLE_DETECTED / REPLAN / STATION_SKIPPED)",
+        "ok": true,
+        "measured": "['MISSION_DONE', 'MISSION_START', 'OBSTACLE_DETECTED']"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 155.2,
+      "distance_m": 24.95,
+      "energy_wh": 0.731,
+      "collisions": 0,
+      "min_clearance_m": 0.075,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.046,
+      "stop_yaw_err_max_deg": 2.07,
+      "dock_error_m": 0.037,
+      "events": [
+        "MISSION_DONE",
+        "MISSION_START",
+        "OBSTACLE_DETECTED"
+      ]
+    }
+  },
+  {
+    "name": "person_steps_into_path",
+    "purpose": "A person steps 0.22 m in front of the bumper at 0.3 m/s, stays 8 s, then leaves",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "mission state DONE",
+        "ok": true,
+        "measured": "DONE"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      },
+      {
+        "criterion": "stopping distance <= 0.15 m (R-SAF-02)",
+        "ok": true,
+        "measured": "0.043"
+      },
+      {
+        "criterion": "never closer than 0.05 m to the person",
+        "ok": true,
+        "measured": "0.073"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 194.8,
+      "distance_m": 33.8,
+      "energy_wh": 0.931,
+      "collisions": 0,
+      "min_clearance_m": 0.073,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.04,
+      "stop_yaw_err_max_deg": 2.12,
+      "dock_error_m": 0.037,
+      "events": [
+        "MISSION_DONE",
+        "MISSION_START",
+        "OBSTACLE_DETECTED",
+        "REPLAN"
+      ]
+    }
+  },
+  {
+    "name": "low_battery",
+    "purpose": "State of charge crosses the 25 % return threshold during the mission",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "BATTERY_LOW raised",
+        "ok": true,
+        "measured": "['BATTERY_LOW', 'MISSION_ABORTED', 'MISSION_START']"
+      },
+      {
+        "criterion": "returns to dock (<= 0.10 m)",
+        "ok": true,
+        "measured": "0.038"
+      },
+      {
+        "criterion": "mission recorded as aborted, not done",
+        "ok": true,
+        "measured": "aborted"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      }
+    ],
+    "metrics": {
+      "final_state": "ABORTED",
+      "detail": "low battery",
+      "sim_time_s": 73.7,
+      "distance_m": 13.72,
+      "energy_wh": 0.355,
+      "collisions": 0,
+      "min_clearance_m": 0.077,
+      "stations_done": 3,
+      "skipped": [],
+      "stop_err_max_m": 0.04,
+      "stop_yaw_err_max_deg": 2.07,
+      "dock_error_m": 0.038,
+      "events": [
+        "BATTERY_LOW",
+        "MISSION_ABORTED",
+        "MISSION_START"
+      ]
+    }
+  },
+  {
+    "name": "lidar_failure",
+    "purpose": "Lidar stops delivering scans while driving",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "mission ABORTED with LIDAR_FAULT",
+        "ok": true,
+        "measured": "('ABORTED', 'lidar fault')"
+      },
+      {
+        "criterion": "stops within 0.15 m of the fault",
+        "ok": true,
+        "measured": "0.052"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      }
+    ],
+    "metrics": {
+      "final_state": "ABORTED",
+      "detail": "lidar fault",
+      "sim_time_s": 14.1,
+      "distance_m": 2.17,
+      "energy_wh": 0.063,
+      "collisions": 0,
+      "min_clearance_m": 0.215,
+      "stations_done": 1,
+      "skipped": [],
+      "stop_err_max_m": 0.035,
+      "stop_yaw_err_max_deg": 2.05,
+      "dock_error_m": 2.171,
+      "events": [
+        "LIDAR_FAULT",
+        "MISSION_ABORTED",
+        "MISSION_START"
+      ]
+    }
+  },
+  {
+    "name": "emergency_stop",
+    "purpose": "E-stop pressed while driving; released; operator resumes",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "stops within 0.15 m (R-SAF-02)",
+        "ok": true,
+        "measured": "0.029"
+      },
+      {
+        "criterion": "state ESTOP while pressed",
+        "ok": true,
+        "measured": "ESTOP"
+      },
+      {
+        "criterion": "resume refused while still pressed",
+        "ok": true,
+        "measured": "True"
+      },
+      {
+        "criterion": "mission completes after release + operator resume",
+        "ok": true,
+        "measured": "DONE"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 141.7,
+      "distance_m": 23.1,
+      "energy_wh": 0.661,
+      "collisions": 0,
+      "min_clearance_m": 0.075,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.041,
+      "stop_yaw_err_max_deg": 2.06,
+      "dock_error_m": 0.037,
+      "events": [
+        "ESTOP",
+        "MISSION_DONE",
+        "MISSION_START",
+        "RESUME"
+      ]
+    }
+  },
+  {
+    "name": "lost_base_link",
+    "purpose": "SBC <-> base-controller link drops for 5 s while driving",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "rover stops by firmware time-out within 0.20 m",
+        "ok": true,
+        "measured": "0.117"
+      },
+      {
+        "criterion": "FAULT state during the outage",
+        "ok": true,
+        "measured": "FAULT"
+      },
+      {
+        "criterion": "mission ABORTED after the link returns (no automatic restart)",
+        "ok": true,
+        "measured": "ABORTED"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      }
+    ],
+    "metrics": {
+      "final_state": "ABORTED",
+      "detail": "base link lost",
+      "sim_time_s": 18.0,
+      "distance_m": 2.24,
+      "energy_wh": 0.075,
+      "collisions": 0,
+      "min_clearance_m": 0.215,
+      "stations_done": 1,
+      "skipped": [],
+      "stop_err_max_m": 0.035,
+      "stop_yaw_err_max_deg": 2.05,
+      "dock_error_m": 2.235,
+      "events": [
+        "LINK_LOST",
+        "LINK_RESTORED",
+        "MISSION_ABORTED",
+        "MISSION_START"
+      ]
+    }
+  },
+  {
+    "name": "env_sensor_failure",
+    "purpose": "Environmental sensor bus fails (I2C error on every read)",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "mission still completes",
+        "ok": true,
+        "measured": "DONE"
+      },
+      {
+        "criterion": "ENV_SENSOR_FAULT reported",
+        "ok": true,
+        "measured": "['ENV_SENSOR_FAULT', 'MISSION_DONE', 'MISSION_START']"
+      },
+      {
+        "criterion": "plant observations stored without an environment link",
+        "ok": true,
+        "measured": "96"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 139.4,
+      "distance_m": 23.12,
+      "energy_wh": 0.654,
+      "collisions": 0,
+      "min_clearance_m": 0.077,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.04,
+      "stop_yaw_err_max_deg": 2.07,
+      "dock_error_m": 0.036,
+      "events": [
+        "ENV_SENSOR_FAULT",
+        "MISSION_DONE",
+        "MISSION_START"
+      ]
+    }
+  },
+  {
+    "name": "localization_failure",
+    "purpose": "Pose estimate suddenly wrong by 0.9 m / 29 deg (robot pushed or map mismatch)",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "LOCALIZATION_LOST raised and mission ABORTED",
+        "ok": true,
+        "measured": "('ABORTED', 'localization lost')"
+      },
+      {
+        "criterion": "detected within 10 s",
+        "ok": true,
+        "measured": "1.6"
+      }
+    ],
+    "metrics": {
+      "final_state": "ABORTED",
+      "detail": "localization lost",
+      "sim_time_s": 13.6,
+      "distance_m": 2.2,
+      "energy_wh": 0.061,
+      "collisions": 0,
+      "min_clearance_m": 0.08,
+      "stations_done": 1,
+      "skipped": [],
+      "stop_err_max_m": 0.035,
+      "stop_yaw_err_max_deg": 2.05,
+      "dock_error_m": 3.091,
+      "events": [
+        "LOCALIZATION_LOST",
+        "MISSION_ABORTED",
+        "MISSION_START",
+        "OBSTACLE_DETECTED"
+      ]
+    }
+  },
+  {
+    "name": "wheel_slip_10pct",
+    "purpose": "Left wheel loses 10 % of its travel (wet floor) for the whole mission",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "mission state DONE",
+        "ok": true,
+        "measured": "DONE"
+      },
+      {
+        "criterion": "no collision",
+        "ok": true,
+        "measured": "0"
+      },
+      {
+        "criterion": "stop position error <= 0.08 m despite slip",
+        "ok": true,
+        "measured": "0.025"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 179.8,
+      "distance_m": 24.27,
+      "energy_wh": 0.826,
+      "collisions": 0,
+      "min_clearance_m": 0.084,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.025,
+      "stop_yaw_err_max_deg": 0.34,
+      "dock_error_m": 0.029,
+      "events": [
+        "MISSION_DONE",
+        "MISSION_START",
+        "RECOVERY_BACKUP"
+      ]
+    }
+  },
+  {
+    "name": "blurred_images",
+    "purpose": "Camera delivers motion-blurred frames (13 px) at every stop",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "retakes attempted",
+        "ok": true,
+        "measured": "['IMAGE_RETAKE', 'MISSION_DONE', 'MISSION_START']"
+      },
+      {
+        "criterion": "all observations marked unreliable (no plant flagged from a bad frame)",
+        "ok": true,
+        "measured": "{'unreliable': 96}"
+      },
+      {
+        "criterion": "mission still completes",
+        "ok": true,
+        "measured": "DONE"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 168.6,
+      "distance_m": 23.13,
+      "energy_wh": 0.792,
+      "collisions": 0,
+      "min_clearance_m": 0.077,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.041,
+      "stop_yaw_err_max_deg": 2.05,
+      "dock_error_m": 0.037,
+      "events": [
+        "IMAGE_RETAKE",
+        "MISSION_DONE",
+        "MISSION_START"
+      ]
+    }
+  },
+  {
+    "name": "vision_on_synthetic_truth",
+    "purpose": "Flag recall / precision and canopy-area error on synthetic plants (severity 0.7-1.0)",
+    "passed": true,
+    "criteria": [
+      {
+        "criterion": "recall >= 0.90 on synthetic abnormal plants",
+        "ok": true,
+        "measured": "1.000 (35/35)"
+      },
+      {
+        "criterion": "precision >= 0.95",
+        "ok": true,
+        "measured": "1.000 (35/35)"
+      },
+      {
+        "criterion": "median canopy-area error <= 5 %",
+        "ok": true,
+        "measured": "2.6 %"
+      }
+    ],
+    "metrics": {
+      "final_state": "DONE",
+      "detail": "stations complete",
+      "sim_time_s": 138.5,
+      "distance_m": 23.11,
+      "energy_wh": 0.65,
+      "collisions": 0,
+      "min_clearance_m": 0.081,
+      "stations_done": 9,
+      "skipped": [],
+      "stop_err_max_m": 0.044,
+      "stop_yaw_err_max_deg": 1.99,
+      "dock_error_m": 0.034,
+      "events": [
+        "MISSION_DONE",
+        "MISSION_START"
+      ],
+      "tp": 35,
+      "fp": 0,
+      "fn": 0,
+      "tn": 61
+    }
+  }
+]
