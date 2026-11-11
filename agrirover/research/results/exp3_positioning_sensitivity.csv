@@ -1,0 +1,7 @@
+stop_error_sigma_mm,flag_recall_sev0p8,false_flag_rate_healthy
+0,1.0,0.0
+10,1.0,0.0
+20,1.0,0.0
+40,1.0,0.0
+60,0.967,0.028
+90,0.942,0.103

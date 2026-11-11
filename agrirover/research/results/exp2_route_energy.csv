@@ -1,0 +1,4 @@
+route,state,pred_distance_m,sim_distance_m,pred_duration_s,sim_duration_s,pred_energy_wh,sim_energy_wh,sim_drive_share
+naive,DONE,77.6,74.5,466.0,422.0,2.22,1.98,0.66
+serpentine,DONE,49.6,46.8,373.0,309.0,1.73,1.4,0.53
+optimal,DONE,49.6,46.8,373.0,309.0,1.73,1.4,0.53
