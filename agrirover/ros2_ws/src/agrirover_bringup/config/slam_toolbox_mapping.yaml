@@ -1,0 +1,16 @@
+# slam_toolbox (online async) for the initial site survey; drive the rover manually, then save the map and compare it
+# with the facility drawing (maps/greenhouse.yaml). NOT executed in the authoring environment.
+slam_toolbox:
+  ros__parameters:
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan
+    mode: mapping
+    resolution: 0.05
+    max_laser_range: 12.0
+    minimum_travel_distance: 0.2
+    minimum_travel_heading: 0.2
+    do_loop_closing: true
+    transform_publish_period: 0.02
+    map_update_interval: 2.0
