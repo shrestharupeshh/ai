@@ -147,7 +147,7 @@ def electronics_tray() -> cq.Workplane:
     """3 mm aluminium tray on four M3 x 15 standoffs: carrier PCB, Pi 5, two motor-driver carriers, DC/DC."""
     p = cq.Workplane("XY").rect(190, 180).extrude(3).edges("|Z").fillet(4)
     p = p.faces(">Z").workplane().pushPoints([(dx, dy) for dx in (-80, 80) for dy in (-75, 75)]).hole(3.4)
-    pcb = [(-35 + dx, 40 + dy) for dx in (-46, 46) for dy in (-36, 36)]            # 100 x 80 PCB, 92 x 72 holes
+    pcb = [(-35 + dx, 40 + dy) for dx in (-46, 46) for dy in (-37, 37)]            # ARC-1: 100 x 82 PCB, 92 x 74 holes
     pi = [(-52.5 + 3.5 + dx, -52 + dy) for dx in (0, 58) for dy in (-24.5, 24.5)]  # Pi 5: 58 x 49 pattern, M2.5
     p = p.faces(">Z").workplane().pushPoints(pcb).hole(3.4)
     p = p.faces(">Z").workplane().pushPoints(pi).hole(2.7)
@@ -345,7 +345,7 @@ def build_parts() -> list[Part]:
              [loc(-CASTER_X, 0, Z_LO - C["front_caster_gap_mm"])], mass_kg=0.15, pn="see BOM"))
     add(Part("battery", box_env(BAT[1], BAT[0], BAT[2], 4), "COTS", "LiFePO4 12.8 V 12 Ah", "-", blue,
              [loc(-45, 0, Z_LO_TOP + 3)], mass_kg=1.5, pn="Bioenno BLF-1212A"))
-    add(Part("control_pcb", box_env(100, 80, 1.6), "FAB", "PCB, see electrical/pcb", "FR-4", pcbg,
+    add(Part("control_pcb", box_env(100, 82, 1.6), "FAB", "PCB, see electrical/pcb", "FR-4", pcbg,
              [loc(120 - 35, 40, Z_LO_TOP + 18 + 8)], mass_kg=0.09))
     add(Part("sbc_pi5", box_env(85, 56, 18), "COTS", "Raspberry Pi 5 8 GB + active cooler", "-", pcbg,
              [loc(120 - 52.5 + 3.5 + 29, -52, Z_LO_TOP + 18 + 6)], mass_kg=0.09, pn="SC1112"))
