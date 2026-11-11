@@ -23,7 +23,7 @@ wheel_R,1,COTS,PU scooter wheel + 6 mm hub adaptor,PU / Al,0.25,100.0 x 24.0 x 1
 caster_front,1,COTS,40 mm swivel caster,-,0.15,53.0 x 42.0 x 71.0,see BOM (height to be shimmed)
 caster_rear,1,COTS,40 mm swivel caster,-,0.15,53.0 x 42.0 x 71.0,see BOM
 battery,1,COTS,LiFePO4 12.8 V 12 Ah,-,1.5,56.0 x 215.0 x 79.0,Bioenno BLF-1212A
-control_pcb,1,FAB,"PCB, see electrical/pcb",FR-4,0.09,100.0 x 80.0 x 1.6,
+control_pcb,1,FAB,"PCB, see electrical/pcb",FR-4,0.09,100.0 x 82.0 x 1.6,
 sbc_pi5,1,COTS,Raspberry Pi 5 8 GB + active cooler,-,0.09,85.0 x 56.0 x 18.0,SC1112
 motor_driver,2,COTS,TB9051FTG carrier,-,0.004,25.4 x 20.3 x 6.0,Pololu 2997
 dcdc_5v,1,COTS,5 V 5 A buck,-,0.02,43.0 x 22.0 x 12.0,Pololu D36V50F5
